@@ -5,23 +5,23 @@ import time
 MOVES = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), 
          (1, -2), (1, 2), (2, -1), (2, 1)]
 
+RED = "\033[91m"
+RESET = "\033[0m"
+
 def clear_screen():
     print("\033[2J\033[H", end="")
 
 def is_threatened(nr, nc, alive_enemies):
-    """Mengecek apakah petak (nr, nc) sedang diserang oleh musuh yang masih hidup"""
     for (er, ec), etype in alive_enemies.items():
         dr, dc = nr - er, nc - ec
         if dr == 0 and dc == 0: 
-            continue # Kita bisa memakan musuh ini, jadi petak ini aman dari dirinya sendiri
+            continue
 
-        if etype == 'k': # King
+        if etype == 'k':
             if abs(dr) <= 1 and abs(dc) <= 1: return True
-        elif etype == 'n': # Knight
-            if (abs(dr) == 2 and abs(dc) == 1) or (abs(dr) == 1 and abs(dc) == 2): return True
-        elif etype == 'p': # Pawn (Asumsi jalan ke bawah / row bertambah)
+        elif etype == 'p':
             if dr == 1 and abs(dc) == 1: return True
-        elif etype in ['r', 'b', 'q']: # Rook, Bishop, Queen
+        elif etype in ['r', 'b', 'q']:
             is_diag = (abs(dr) == abs(dc) and dr != 0)
             is_straight = ((dr == 0 and dc != 0) or (dc == 0 and dr != 0))
             
@@ -36,7 +36,6 @@ def is_threatened(nr, nc, alive_enemies):
                 
                 curr_r, curr_c = er + sr, ec + sc
                 blocked = False
-                # Cek apakah ada bidak musuh lain yang menghalangi jalur serangan
                 while (curr_r, curr_c) != (nr, nc):
                     if (curr_r, curr_c) in alive_enemies:
                         blocked = True
@@ -53,10 +52,9 @@ def get_warnsdorff_degree(r, c, N, visited, alive_enemies):
     for dr, dc in MOVES:
         nr, nc = r + dr, c + dc
         if 0 <= nr < N and 0 <= nc < N and (nr, nc) not in visited:
-            # Prediksi state jika kita melangkah ke sana
             new_alive = alive_enemies.copy()
             if (nr, nc) in new_alive:
-                del new_alive[(nr, nc)] # Musuh dimakan
+                del new_alive[(nr, nc)]
             
             if not is_threatened(nr, nc, new_alive):
                 degree += 1
@@ -70,16 +68,11 @@ def knight_tour_astar(N, start_r, start_c, initial_enemies):
     start_path = [(start_r, start_c)]
     start_visited = frozenset(start_path)
     
-    # Kuda memakan musuh di posisi awal (jika ada)
     alive_enemies = initial_enemies.copy()
     if (start_r, start_c) in alive_enemies:
         del alive_enemies[(start_r, start_c)]
         
-    if is_threatened(start_r, start_c, alive_enemies):
-        print("Peringatan: Posisi awal Anda sedang diserang musuh!")
-
     deg = get_warnsdorff_degree(start_r, start_c, N, start_visited, alive_enemies)
-    # Gunakan minus counter agar LIFO (DFS-like) saat tie-breaker
     heapq.heappush(pq, (total_target - 1, deg, -counter, start_r, start_c, start_path, start_visited, alive_enemies))
     
     while pq:
@@ -93,7 +86,7 @@ def knight_tour_astar(N, start_r, start_c, initial_enemies):
             if 0 <= nr < N and 0 <= nc < N and (nr, nc) not in visited:
                 next_alive = alive.copy()
                 if (nr, nc) in next_alive:
-                    del next_alive[(nr, nc)] # Kuda memakan musuh!
+                    del next_alive[(nr, nc)]
                     
                 if not is_threatened(nr, nc, next_alive):
                     next_path = path + [(nr, nc)]
@@ -105,6 +98,27 @@ def knight_tour_astar(N, start_r, start_c, initial_enemies):
                     
     return None
 
+def print_initial_board(N, start_r, start_c, enemies):
+    print("\nBoard Awal:")
+    for i in range(N):
+        row = ""
+        for j in range(N):
+            if i == start_r and j == start_c:
+                row += " K "
+            elif (i, j) in enemies:
+                row += f"{RED} {enemies[(i, j)].upper()} {RESET}"
+            else:
+                row += " . "
+        print(row)
+
+def print_final_board(N, path):
+    print("\nUrutan Langkah:")
+    board = [[" . " for _ in range(N)] for _ in range(N)]
+    for step, (r, c) in enumerate(path):
+        board[r][c] = f"{step + 1:3}"
+    for row in board:
+        print("".join(row))
+
 def animate_tour(N, path, initial_enemies, delay=0.6):
     alive_enemies = initial_enemies.copy()
     board = [[" . " for _ in range(N)] for _ in range(N)]
@@ -114,21 +128,20 @@ def animate_tour(N, path, initial_enemies, delay=0.6):
         print(f"Langkah ke-{step + 1}/{len(path)}")
         print("=" * 20)
         
-        # Hapus musuh jika dimakan
         if (r, c) in alive_enemies:
             del alive_enemies[(r, c)]
             
-        # Gambar ulang papan dengan musuh yang MASIH HIDUP
         for i in range(N):
             for j in range(N):
-                if board[i][j] not in [" . ", " K "]:
-                    pass # Biarkan angka jejak langkah sebelumnya
+                if " K " in board[i][j]:
+                    board[i][j] = " . "
+                elif board[i][j].strip().isdigit():
+                    pass
                 elif (i, j) in alive_enemies:
-                    board[i][j] = f" {alive_enemies[(i, j)].upper()} "
+                    board[i][j] = f"{RED} {alive_enemies[(i, j)].upper()} {RESET}"
                 else:
-                    if board[i][j] == " K ": board[i][j] = " . "
+                    board[i][j] = " . "
                     
-        # Tandai kuda
         board[r][c] = " K "
         
         for row in board:
@@ -145,17 +158,30 @@ if __name__ == "__main__":
     
     num_enemies = int(input("Jumlah bidak musuh: "))
     enemies = {}
-    print("Tipe bidak: k (King), q (Queen), r (Rook), b (Bishop), n (Knight), p (Pawn)")
-    for i in range(num_enemies):
-        tipe, er, ec = input(f"Bidak musuh ke-{i+1} (tipe baris kolom): ").split()
-        enemies[(int(er), int(ec))] = tipe.lower()
+    if num_enemies > 0:
+        print("Tipe bidak: k (King), q (Queen), r (Rook), b (Bishop), p (Pawn)")
+        for i in range(num_enemies):
+            tipe, er, ec = input(f"Bidak musuh ke-{i+1} (tipe baris kolom): ").split()
+            if tipe.lower() == 'n':
+                print("Error: Musuh tidak boleh berjenis Knight/Kuda!")
+                exit()
+            enemies[(int(er), int(ec))] = tipe.lower()
+            
+    pilih_animasi = input("Gunakan animasi? (y/n): ").strip().lower()
+    
+    if pilih_animasi != 'y':
+        print_initial_board(N, r, c, enemies)
         
     print("\nMencari jalur... (bisa memakan waktu jika N besar)")
     path = knight_tour_astar(N, r, c, enemies)
     
     if path:
-        print("\nSolusi ditemukan! Memulai animasi...")
-        time.sleep(1.5)
-        animate_tour(N, path, enemies)
+        if pilih_animasi == 'y':
+            print("\nSolusi ditemukan! Memulai animasi...")
+            time.sleep(1.5)
+            animate_tour(N, path, enemies)
+        else:
+            print("\nSolusi ditemukan!")
+            print_final_board(N, path)
     else:
         print("\nKuda terjebak! Tidak ada jalur yang aman untuk melewati seluruh papan.")
