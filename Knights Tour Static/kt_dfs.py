@@ -29,7 +29,7 @@ LEVELS = {
     3: {"n": 7, "start": (0, 0), "piece": (3, 3), "kind": "rook"},
 }
 
-NODE_CAP = 10_000_000   # raise this to let DFS run longer (30M takes minutes)
+NODE_CAP = 5_000_000   # raise this to let DFS run longer (30M takes minutes)
 
 
 def attack_zone(n, piece, kind):

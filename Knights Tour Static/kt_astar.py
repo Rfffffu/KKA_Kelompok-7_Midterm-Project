@@ -41,7 +41,7 @@ LEVELS = {
     3: {"n": 7, "start": (0, 0), "piece": (3, 3), "kind": "rook"},
 }
 
-NODE_CAP = 3_000_000        # max states expanded
+NODE_CAP = 5_000_000        # max states expanded
 QUEUE_CAP = 2_000_000       # max partial tours stored at once
 
 
