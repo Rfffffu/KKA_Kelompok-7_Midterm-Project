@@ -1,0 +1,154 @@
+"""
+Greedy (Warnsdorff) Knight's Tour for Levels 1-3.
+
+Informed search without backtracking: from the current square, move to the
+legal square with the FEWEST onward moves (Warnsdorff's rule). The choice is
+never undone, so the algorithm is very fast but can get stuck.
+
+  h(n) = number of onward moves available from the candidate square
+  Ties are broken by the first square in KNIGHT_MOVES order.
+
+Coordinates: (x, y), 0-indexed, x = column, y = row, (0,0) = top-left.
+
+Levels:
+  1: 5x5, no extra piece
+  2: 6x6, king at (3,3)  -> attacks its 8 neighbours until captured
+  3: 7x7, rook at (3,3)  -> attacks its row and column until captured
+
+The tour must visit every square, including the piece's square.
+Landing on the piece captures it and removes its attack zone.
+
+"Node" = one square stepped onto (including the start). For greedy this
+equals the squares visited before it finished or got stuck. Peak memory is 1
+because only the current state is kept (no stack, no queue).
+"""
+
+import time
+
+KNIGHT_MOVES = [(1, 2), (2, 1), (-1, 2), (-2, 1),
+                (1, -2), (2, -1), (-1, -2), (-2, -1)]
+
+LEVELS = {
+    1: {"n": 5, "start": (0, 0), "piece": None,   "kind": None},
+    2: {"n": 6, "start": (0, 0), "piece": (3, 3), "kind": "king"},
+    3: {"n": 7, "start": (0, 0), "piece": (3, 3), "kind": "rook"},
+}
+
+
+def attack_zone(n, piece, kind):
+    """Squares the piece attacks (forbidden to the knight until capture)."""
+    if piece is None:
+        return set()
+    px, py = piece
+    zone = set()
+    for x in range(n):
+        for y in range(n):
+            if (x, y) == piece:
+                continue
+            if kind == "king" and max(abs(x - px), abs(y - py)) == 1:
+                zone.add((x, y))
+            elif kind == "rook" and (x == px or y == py):
+                zone.add((x, y))
+    return zone
+
+
+def legal_moves(pos, visited, captured, n, zone):
+    """Knight moves to unvisited, on-board squares (avoiding the zone before capture)."""
+    for dx, dy in KNIGHT_MOVES:
+        q = (pos[0] + dx, pos[1] + dy)
+        if 0 <= q[0] < n and 0 <= q[1] < n and q not in visited \
+                and (captured or q not in zone):
+            yield q
+
+
+def onward_degree(q, visited, captured, n, zone, piece):
+    """Warnsdorff score: number of moves available from q if we went there."""
+    c = captured or q == piece
+    return sum(1 for _ in legal_moves(q, visited | {q}, c, n, zone))
+
+
+def greedy_tour(n, start, piece=None, kind=None):
+    """Returns (solved, path, nodes, peak_memory)."""
+    zone = attack_zone(n, piece, kind)
+    total = n * n
+
+    if start in zone or start == piece:
+        raise ValueError("Start square must be outside the piece's square and zone.")
+
+    visited = {start}
+    path = [start]
+    captured = piece is None      # no piece -> nothing to capture
+    pos = start
+
+    while len(path) < total:
+        candidates = list(legal_moves(pos, visited, captured, n, zone))
+        if not candidates:
+            return False, path, len(path), 1     # stuck: cannot undo moves
+
+        # Greedy choice: fewest onward moves (ties -> first in move order)
+        nxt = min(candidates,
+                  key=lambda q: onward_degree(q, visited, captured, n, zone, piece))
+
+        visited.add(nxt)
+        path.append(nxt)
+        if nxt == piece:
+            captured = True
+        pos = nxt
+
+    return True, path, len(path), 1
+
+def print_initial_board(n, start, piece=None, kind=None):
+    """Show the starting board: knight, piece, and the piece's attack zone.
+
+    N = knight start, K = king, R = rook, x = attacked square, . = free square
+    """
+    zone = attack_zone(n, piece, kind)
+    symbol = {"king": "K", "rook": "R"}.get(kind, "P")
+    for y in range(n):
+        row = []
+        for x in range(n):
+            if (x, y) == start:
+                label = "N"
+            elif (x, y) == piece:
+                label = symbol
+            elif (x, y) in zone:
+                label = "x"
+            else:
+                label = "."
+            row.append(label.rjust(4))
+        print("".join(row))
+    legend = "(N = knight"
+    if piece:
+        legend += f", {symbol} = {kind}, x = attack square ({len(zone)} squares)"
+    print(legend + ")")
+
+def print_board(n, path, piece=None):
+    """Show the order in which squares were visited (1 = start)."""
+    order = {sq: i + 1 for i, sq in enumerate(path)}
+    for y in range(n):
+        row = []
+        for x in range(n):
+            label = str(order[(x, y)]) if (x, y) in order else "."
+            if (x, y) == piece:
+                label += "*"
+            row.append(label.rjust(4))
+        print("".join(row))
+    if piece:
+        print("(* = piece square)")
+
+
+if __name__ == "__main__":
+    for level, cfg in LEVELS.items():
+        print("================================================================")
+        print(f"\n==================== Level {level}: initial board ====================")
+        print("================================================================")
+        print_initial_board(cfg["n"], cfg["start"], cfg["piece"], cfg["kind"])
+        t = time.time()
+        ok, path, nodes, peak = greedy_tour(cfg["n"], cfg["start"],
+                                            cfg["piece"], cfg["kind"])
+        ms = (time.time() - t) * 1000
+        status = "SOLVED" if ok else "STUCK (greedy cannot backtrack)"
+        print(f"\nLevel {level}: {cfg['n']}x{cfg['n']}, start {cfg['start']}, "
+              f"piece {cfg['kind']} {cfg['piece']} -> {status}")
+        print(f"  nodes={nodes:,}  peak memory={peak}  time={ms:.1f} ms")
+        print_board(cfg["n"], path, cfg["piece"])
