@@ -1,5 +1,9 @@
 import heapq
 import time
+import tracemalloc # Untuk menghitung penggunaan memori
+
+# PARAMETER MAKSIMAL NODE (bisa diubah-ubah di sini)
+MAX_NODES_EXPANDED = 150000
 
 # Pergerakan kuda catur
 MOVES = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), 
@@ -64,6 +68,7 @@ def knight_tour_astar(N, start_r, start_c, initial_enemies):
     total_target = N * N
     pq = []
     counter = 0 
+    nodes_expanded = 0 # TRACKER NODE
     
     start_path = [(start_r, start_c)]
     start_visited = frozenset(start_path)
@@ -76,10 +81,15 @@ def knight_tour_astar(N, start_r, start_c, initial_enemies):
     heapq.heappush(pq, (total_target - 1, deg, -counter, start_r, start_c, start_path, start_visited, alive_enemies))
     
     while pq:
+        # Hentikan jika melebihi limit
+        if nodes_expanded >= MAX_NODES_EXPANDED:
+            break
+            
         rem, deg, _, r, c, path, visited, alive = heapq.heappop(pq)
+        nodes_expanded += 1
         
         if rem == 0:
-            return path
+            return path, nodes_expanded
             
         for dr, dc in MOVES:
             nr, nc = r + dr, c + dc
@@ -96,7 +106,7 @@ def knight_tour_astar(N, start_r, start_c, initial_enemies):
                     counter += 1
                     heapq.heappush(pq, (rem - 1, next_deg, -counter, nr, nc, next_path, next_visited, next_alive))
                     
-    return None
+    return None, nodes_expanded
 
 def print_initial_board(N, start_r, start_c, enemies):
     print("\nBoard Awal:")
@@ -172,16 +182,39 @@ if __name__ == "__main__":
     if pilih_animasi != 'y':
         print_initial_board(N, r, c, enemies)
         
-    print("\nMencari jalur... (bisa memakan waktu jika N besar)")
-    path = knight_tour_astar(N, r, c, enemies)
+    print(f"\nMencari jalur... (Maks Node: {MAX_NODES_EXPANDED})")
+    
+    # MULAI TRACKING PERFORMA
+    tracemalloc.start()
+    start_time = time.perf_counter()
+    
+    path, nodes_expanded = knight_tour_astar(N, r, c, enemies)
+    
+    end_time = time.perf_counter()
+    current_mem, peak_mem = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    # SELESAI TRACKING PERFORMA
+    
+    runtime_ms = (end_time - start_time) * 1000
+    peak_mem_mb = peak_mem / (1024 * 1024)
+
+    # Cetak Metrik
+    print("\n" + "="*30)
+    print("HASIL ANALISIS PERFORMA:")
+    print(f"Nodes Expanded : {nodes_expanded} nodes")
+    print(f"Runtime        : {runtime_ms:.2f} ms")
+    print(f"Peak Memory    : {peak_mem_mb:.4f} MB")
+    print("="*30)
     
     if path:
         if pilih_animasi == 'y':
-            print("\nSolusi ditemukan! Memulai animasi...")
-            time.sleep(1.5)
+            print("\nMemulai animasi dalam 3 detik...")
+            time.sleep(3)
             animate_tour(N, path, enemies)
         else:
-            print("\nSolusi ditemukan!")
             print_final_board(N, path)
     else:
-        print("\nKuda terjebak! Tidak ada jalur yang aman untuk melewati seluruh papan.")
+        if nodes_expanded >= MAX_NODES_EXPANDED:
+            print(f"\nPencarian dihentikan! Melebihi batas maksimal node ({MAX_NODES_EXPANDED}).")
+        else:
+            print("\nKuda terjebak! Tidak ada jalur yang aman untuk melewati seluruh papan.")
