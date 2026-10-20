@@ -103,14 +103,18 @@ def astar_tour(n, start, piece=None, kind=None,
 
     expanded = 0
     peak_depth = 1
+    deepest_path = list(start_state[1])
 
     while queue:
         f, _, g, _, (pos, path, visited, captured) = heapq.heappop(queue)
         expanded += 1
-        peak_depth = max(peak_depth, len(path))
+
+        if len(path) > peak_depth:
+            peak_depth = len(path)
+            deepest_path = list(path)
 
         if expanded > node_cap:
-            return False, [], expanded, peak_depth
+            return False, deepest_path, expanded, peak_depth
         if len(visited) == total:
             return True, list(path), expanded, peak_depth     # goal reached
 
@@ -122,9 +126,9 @@ def astar_tour(n, start, piece=None, kind=None,
                                    next(counter), (q, path + (q,), v2, c2)))
 
         if len(queue) > queue_cap:
-            return False, [], expanded, peak_depth
+            return False, deepest_path, expanded, peak_depth
 
-    return False, [], expanded, peak_depth
+    return False, deepest_path, expanded, peak_depth
 
 
 def print_initial_board(n, start, piece=None, kind=None):
@@ -179,10 +183,9 @@ if __name__ == "__main__":
         _, peak_bytes = tracemalloc.get_traced_memory()
         tracemalloc.stop()
 
-        status = "SOLVED" if ok else "NOT SOLVED (hit a cap)"
+        status = "SOLVED" if ok else "NOT SOLVED (hit a cap or exhausted search)"
         print(f"\nLevel {level}: {cfg['n']}x{cfg['n']}, start {cfg['start']}, "
               f"piece {cfg['kind']} {cfg['piece']} -> {status}")
         print(f"  nodes={nodes:,}  peak depth={peak}  peak memory={peak_bytes / 1024:.2f} KB  time={ms:.1f} ms")
-        if ok:
-            print_board(cfg["n"], path, cfg["piece"])
+        print_board(cfg["n"], path, cfg["piece"])
         print()

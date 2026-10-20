@@ -63,9 +63,11 @@ def dfs_tour(n, start, piece=None, kind=None, node_cap=NODE_CAP):
 
     visited = {start}
     path = [start]
+    deepest_path = list(path)
     stats = {"nodes": 0, "peak": 1}
 
     def search(pos, captured):
+        nonlocal deepest_path
         stats["nodes"] += 1
         if stats["nodes"] > node_cap:
             return False
@@ -75,7 +77,10 @@ def dfs_tour(n, start, piece=None, kind=None, node_cap=NODE_CAP):
         for q in legal_moves(pos, visited, captured, n, zone):
             visited.add(q)
             path.append(q)
-            stats["peak"] = max(stats["peak"], len(path))
+
+            if len(path) > stats["peak"]:
+                stats["peak"] = len(path)
+                deepest_path = list(path)   # Save snapshot of deepest partial tour
 
             if search(q, captured or q == piece):
                 return True
@@ -87,7 +92,7 @@ def dfs_tour(n, start, piece=None, kind=None, node_cap=NODE_CAP):
         return False
 
     solved = search(start, piece is None)
-    return solved, list(path), stats["nodes"], stats["peak"]
+    return solved, (list(path) if solved else deepest_path), stats["nodes"], stats["peak"]
 
 
 def print_initial_board(n, start, piece=None, kind=None):
@@ -146,6 +151,5 @@ if __name__ == "__main__":
         print(f"\nLevel {level}: {cfg['n']}x{cfg['n']}, start {cfg['start']}, "
               f"piece {cfg['kind']} {cfg['piece']} -> {status}")
         print(f"  nodes={nodes:,}  peak depth={peak}  peak memory={peak_bytes / 1024:.2f} KB  time={ms:.1f} ms")
-        if ok:
-            print_board(cfg["n"], path, cfg["piece"])
+        print_board(cfg["n"], path, cfg["piece"])
         print()
