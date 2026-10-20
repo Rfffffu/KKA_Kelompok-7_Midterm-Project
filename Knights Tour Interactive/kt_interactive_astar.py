@@ -13,8 +13,6 @@ lowest f(n) = g(n) + h(n) is expanded next.
 Supported enemy types:
   - King ('k'): attacks its 8 immediate neighbors
   - Rook ('r'): attacks its row and column
-  - Bishop ('b'): attacks its diagonals
-  - Queen ('q'): attacks its row, column, and diagonals
 """
 
 import heapq
@@ -25,7 +23,7 @@ from collections import deque
 KNIGHT_MOVES = [(1, 2), (2, 1), (-1, 2), (-2, 1),
                 (1, -2), (2, -1), (-1, -2), (-2, -1)]
 
-NODE_CAP = 3_000_000        # max states expanded
+NODE_CAP = 5_000_000        # max states expanded
 QUEUE_CAP = 2_000_000       # max partial tours stored at once
 
 
@@ -42,10 +40,6 @@ def attack_zone(n, piece, kind):
             if kind == "king" and max(abs(x - px), abs(y - py)) == 1:
                 zone.add((x, y))
             elif kind == "rook" and (x == px or y == py):
-                zone.add((x, y))
-            elif kind == "bishop" and abs(x - px) == abs(y - py):
-                zone.add((x, y))
-            elif kind == "queen" and (x == px or y == py or abs(x - px) == abs(y - py)):
                 zone.add((x, y))
     return zone
 
@@ -128,7 +122,7 @@ def astar_tour(n, start, piece=None, kind=None,
 
 def print_initial_board(n, start, piece=None, kind=None):
     zone = attack_zone(n, piece, kind)
-    symbol = {"king": "K", "rook": "R", "queen": "Q", "bishop": "B"}.get(kind, "P")
+    symbol = {"king": "K", "rook": "R"}.get(kind, "P")
     for y in range(n):
         row = []
         for x in range(n):
@@ -183,7 +177,7 @@ if __name__ == "__main__":
         print(f"Invalid input, using default start = {start}")
 
     # 3. Input enemy type and location
-    enemy_choice = input("enemy type [k (king), r (rook), q (queen), b (bishop), none]: ").strip().lower()
+    enemy_choice = input("enemy type [k (king), r (rook), none]: ").strip().lower()
     
     piece = None
     kind = None
@@ -192,10 +186,6 @@ if __name__ == "__main__":
         kind = "king"
     elif enemy_choice in ["r", "rook"]:
         kind = "rook"
-    elif enemy_choice in ["q", "queen"]:
-        kind = "queen"
-    elif enemy_choice in ["b", "bishop"]:
-        kind = "bishop"
 
     if kind is not None:
         try:
