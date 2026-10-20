@@ -1,12 +1,10 @@
 """
-Greedy (Warnsdorff) Knight's Tour for Levels & Custom Setup.
+Greedy (Warnsdorff) Knight's Tour for Custom Board & Enemy Configurations.
 
 Informed search without backtracking: from the current square, move to the
-legal square with the FEWEST onward moves (Warnsdorff's rule). The choice is
-never undone, so the algorithm is very fast but can get stuck.
+legal square with the FEWEST onward moves (Warnsdorff's rule).
 
-  h(n) = number of onward moves available from the candidate square
-  Ties are broken by the first square in KNIGHT_MOVES order.
+Coordinates: (x, y), 0-indexed, x = column, y = row, (0,0) = top-left.
 
 Supported enemy types:
   - King ('k'): attacks its 8 immediate neighbors
@@ -14,6 +12,7 @@ Supported enemy types:
 """
 
 import time
+import tracemalloc
 
 KNIGHT_MOVES = [(1, 2), (2, 1), (-1, 2), (-2, 1),
                 (1, -2), (2, -1), (-1, -2), (-2, -1)]
@@ -52,7 +51,7 @@ def onward_degree(q, visited, captured, n, zone, piece):
 
 
 def greedy_tour(n, start, piece=None, kind=None):
-    """Returns (solved, path, nodes, peak_memory)."""
+    """Returns (solved, path, nodes, peak_depth)."""
     zone = attack_zone(n, piece, kind)
     total = n * n
 
@@ -67,9 +66,8 @@ def greedy_tour(n, start, piece=None, kind=None):
     while len(path) < total:
         candidates = list(legal_moves(pos, visited, captured, n, zone))
         if not candidates:
-            return False, path, len(path), 1     # stuck: cannot undo moves
+            return False, path, len(path), len(path)     # stuck: cannot undo moves
 
-        # Greedy choice: fewest onward moves (ties -> first in move order)
         nxt = min(candidates,
                   key=lambda q: onward_degree(q, visited, captured, n, zone, piece))
 
@@ -79,7 +77,7 @@ def greedy_tour(n, start, piece=None, kind=None):
             captured = True
         pos = nxt
 
-    return True, path, len(path), 1
+    return True, path, len(path), len(path)
 
 
 def print_initial_board(n, start, piece=None, kind=None):
@@ -122,14 +120,12 @@ def print_board(n, path, piece=None):
 if __name__ == "__main__":
     print("=== Interactive Greedy Warnsdorff Knight's Tour ===")
     
-    # 1. Input board size (n)
     try:
         n = int(input("Input board size (n): ").strip())
     except ValueError:
-        n = 8  # Default
+        n = 8
         print(f"Invalid input, using default n = {n}")
 
-    # 2. Input initial knight tile (x y)
     try:
         start_input = input("Input initial knight tile (x y): ").strip()
         sx, sy = map(int, start_input.split())
@@ -138,7 +134,6 @@ if __name__ == "__main__":
         start = (0, 0)
         print(f"Invalid input, using default start = {start}")
 
-    # 3. Input enemy type (k / r / none)
     enemy_choice = input("enemy type [k (king), r (rook), none]: ").strip().lower()
     
     piece = None
@@ -159,23 +154,25 @@ if __name__ == "__main__":
     else:
         print("No enemy piece placed.")
 
-    # Show Initial Board Configuration
     print(f"\nConfiguration: {n}x{n}, start {start}, piece {piece} ({kind})")
     print_initial_board(n, start, piece, kind)
 
-    # Run Greedy Warnsdorff Algorithm
+    tracemalloc.start()
     t = time.time()
     try:
         ok, path, nodes, peak = greedy_tour(n, start, piece, kind)
     except ValueError as e:
         print(f"\nError: {e}")
+        tracemalloc.stop()
         exit()
         
     ms = (time.time() - t) * 1000
+    _, peak_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
 
     print()
     print_board(n, path, piece)
 
     status = "SOLVED" if ok else "STUCK (greedy cannot backtrack)"
-    print(f"-> {status}")
-    print(f"nodes={nodes:,}  peak memory={peak}  time={ms:.1f} ms")
+    print(f"\n-> {status}")
+    print(f"nodes={nodes:,}  peak depth={peak}  peak memory={peak_bytes / 1024:.2f} KB  time={ms:.1f} ms")

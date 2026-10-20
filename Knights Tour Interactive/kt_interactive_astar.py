@@ -10,6 +10,8 @@ lowest f(n) = g(n) + h(n) is expanded next.
   Ties in f are broken by Warnsdorff degree (fewer onward moves first),
   then by deeper partial tours.
 
+Coordinates: (x, y), 0-indexed, x = column, y = row, (0,0) = top-left.
+
 Supported enemy types:
   - King ('k'): attacks its 8 immediate neighbors
   - Rook ('r'): attacks its row and column
@@ -18,6 +20,7 @@ Supported enemy types:
 import heapq
 import itertools
 import time
+import tracemalloc
 from collections import deque
 
 KNIGHT_MOVES = [(1, 2), (2, 1), (-1, 2), (-2, 1),
@@ -69,7 +72,7 @@ def distance_to_piece(n, piece, zone):
 
 def astar_tour(n, start, piece=None, kind=None,
                node_cap=NODE_CAP, queue_cap=QUEUE_CAP):
-    """Returns (solved, path, nodes_expanded, peak_queue_size)."""
+    """Returns (solved, path, nodes_expanded, peak_depth)."""
     zone = attack_zone(n, piece, kind)
     total = n * n
 
@@ -90,21 +93,21 @@ def astar_tour(n, start, piece=None, kind=None,
     start_captured = piece is None
     start_state = (start, (start,), frozenset([start]), start_captured)
     
-    # Priority queue entry: (f, warnsdorff_degree, g, counter, state)
     queue = [(h(start, start_state[2], start_captured), 0, 0,
               next(counter), start_state)]
 
     expanded = 0
-    peak = 1
+    peak_depth = 1
 
     while queue:
         f, _, g, _, (pos, path, visited, captured) = heapq.heappop(queue)
         expanded += 1
+        peak_depth = max(peak_depth, len(path))
 
         if expanded > node_cap:
-            return False, [], expanded, peak
+            return False, [], expanded, peak_depth
         if len(visited) == total:
-            return True, list(path), expanded, peak     # goal reached
+            return True, list(path), expanded, peak_depth     # goal reached
 
         for q in legal_moves(pos, visited, captured, n, zone):
             v2 = visited | {q}
@@ -113,11 +116,10 @@ def astar_tour(n, start, piece=None, kind=None,
             heapq.heappush(queue, (f2, warnsdorff(q, visited, captured), g + 1,
                                    next(counter), (q, path + (q,), v2, c2)))
 
-        peak = max(peak, len(queue))
         if len(queue) > queue_cap:
-            return False, [], expanded, peak
+            return False, [], expanded, peak_depth
 
-    return False, [], expanded, peak
+    return False, [], expanded, peak_depth
 
 
 def print_initial_board(n, start, piece=None, kind=None):
@@ -160,14 +162,12 @@ def print_board(n, path, piece=None):
 if __name__ == "__main__":
     print("=== Interactive Knight's Tour (A* + Warnsdorff) ===")
     
-    # 1. Input board size (n)
     try:
         n = int(input("Input board size (n): ").strip())
     except ValueError:
         n = 8
         print(f"Invalid input, using default n = {n}")
 
-    # 2. Input initial knight tile (x y)
     try:
         start_input = input("Input initial knight tile (x y): ").strip()
         sx, sy = map(int, start_input.split())
@@ -176,7 +176,6 @@ if __name__ == "__main__":
         start = (0, 0)
         print(f"Invalid input, using default start = {start}")
 
-    # 3. Input enemy type and location
     enemy_choice = input("enemy type [k (king), r (rook), none]: ").strip().lower()
     
     piece = None
@@ -197,24 +196,26 @@ if __name__ == "__main__":
     else:
         print("No enemy piece placed.")
 
-    # Show Initial Board Layout
     print(f"\nConfiguration: {n}x{n}, start {start}, piece {piece} ({kind})")
     print_initial_board(n, start, piece, kind)
 
-    # Run A* Search
+    tracemalloc.start()
     t = time.time()
     try:
         ok, path, nodes, peak = astar_tour(n, start, piece, kind)
     except ValueError as e:
         print(f"\nError: {e}")
+        tracemalloc.stop()
         exit()
         
     ms = (time.time() - t) * 1000
+    _, peak_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
 
     if ok:
         print()
         print_board(n, path, piece)
 
     status = "SOLVED" if ok else "NOT SOLVED (hit a cap)"
-    print(f"-> {status}")
-    print(f"nodes={nodes:,}  peak queue={peak:,}  time={ms:.1f} ms")
+    print(f"\n-> {status}")
+    print(f"nodes={nodes:,}  peak depth={peak}  peak memory={peak_bytes / 1024:.2f} KB  time={ms:.1f} ms")

@@ -9,20 +9,15 @@ Coordinates: (x, y), 0-indexed, x = column, y = row, (0,0) = top-left.
 Supported enemy types:
   - King ('k'): attacks its 8 immediate neighbors
   - Rook ('r'): attacks its row and column
-
-The tour must visit every square, including the piece's square.
-Landing on the piece captures it and removes its attack zone.
-
-"Node" = one call of the recursive search (one state entered), including
-states later backed out of. A node cap stops runs that take too long.
 """
 
 import time
+import tracemalloc
 
 KNIGHT_MOVES = [(1, 2), (2, 1), (-1, 2), (-2, 1),
                 (1, -2), (2, -1), (-1, -2), (-2, -1)]
 
-NODE_CAP = 5_000_000   # raise this to let DFS run longer (30M takes minutes)
+NODE_CAP = 5_000_000   # raise this to let DFS run longer
 
 
 def attack_zone(n, piece, kind):
@@ -68,7 +63,7 @@ def dfs_tour(n, start, piece=None, kind=None, node_cap=NODE_CAP):
         if stats["nodes"] > node_cap:
             return False
         if len(path) == total:
-            return True                     # goal: every square visited
+            return True                     # goal reached
 
         for q in legal_moves(pos, visited, captured, n, zone):
             visited.add(q)
@@ -128,14 +123,12 @@ def print_board(n, path, piece=None):
 if __name__ == "__main__":
     print("=== Interactive Plain DFS (Backtracking) Knight's Tour ===")
     
-    # 1. Input board size (n)
     try:
         n = int(input("Input board size (n): ").strip())
     except ValueError:
-        n = 5  # Default
+        n = 5
         print(f"Invalid input, using default n = {n}")
 
-    # 2. Input initial knight tile (x y)
     try:
         start_input = input("Input initial knight tile (x y): ").strip()
         sx, sy = map(int, start_input.split())
@@ -144,7 +137,6 @@ if __name__ == "__main__":
         start = (0, 0)
         print(f"Invalid input, using default start = {start}")
 
-    # 3. Input enemy type (k / r / none)
     enemy_choice = input("enemy type [k (king), r (rook), none]: ").strip().lower()
     
     piece = None
@@ -165,24 +157,26 @@ if __name__ == "__main__":
     else:
         print("No enemy piece placed.")
 
-    # Show Initial Board Layout
     print(f"\nConfiguration: {n}x{n}, start {start}, piece {piece} ({kind})")
     print_initial_board(n, start, piece, kind)
 
-    # Run Plain DFS Search
+    tracemalloc.start()
     t = time.time()
     try:
         ok, path, nodes, peak = dfs_tour(n, start, piece, kind)
     except ValueError as e:
         print(f"\nError: {e}")
+        tracemalloc.stop()
         exit()
         
     ms = (time.time() - t) * 1000
+    _, peak_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
 
     if ok:
         print()
         print_board(n, path, piece)
 
     status = "SOLVED" if ok else f"NOT SOLVED (hit {NODE_CAP:,} node cap)"
-    print(f"-> {status}")
-    print(f"nodes={nodes:,}  peak depth={peak}  time={ms:.1f} ms")
+    print(f"\n-> {status}")
+    print(f"nodes={nodes:,}  peak depth={peak}  peak memory={peak_bytes / 1024:.2f} KB  time={ms:.1f} ms")
