@@ -1,11 +1,10 @@
 import heapq
 import time
-import tracemalloc # Untuk menghitung penggunaan memori
+import tracemalloc
 
-# PARAMETER MAKSIMAL NODE (bisa diubah-ubah di sini)
+# PARAMETER MAKSIMAL NODE
 MAX_NODES_EXPANDED = 150000
 
-# Pergerakan kuda catur
 MOVES = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), 
          (1, -2), (1, 2), (2, -1), (2, 1)]
 
@@ -68,7 +67,10 @@ def knight_tour_astar(N, start_r, start_c, initial_enemies):
     total_target = N * N
     pq = []
     counter = 0 
-    nodes_expanded = 0 # TRACKER NODE
+    
+    # TRACKERS
+    nodes_expanded = 0 
+    max_depth = 0
     
     start_path = [(start_r, start_c)]
     start_visited = frozenset(start_path)
@@ -81,15 +83,19 @@ def knight_tour_astar(N, start_r, start_c, initial_enemies):
     heapq.heappush(pq, (total_target - 1, deg, -counter, start_r, start_c, start_path, start_visited, alive_enemies))
     
     while pq:
-        # Hentikan jika melebihi limit
         if nodes_expanded >= MAX_NODES_EXPANDED:
             break
             
         rem, deg, _, r, c, path, visited, alive = heapq.heappop(pq)
         nodes_expanded += 1
         
+        # Hitung kedalaman node saat ini
+        current_depth = len(path)
+        if current_depth > max_depth:
+            max_depth = current_depth
+        
         if rem == 0:
-            return path, nodes_expanded
+            return path, nodes_expanded, max_depth
             
         for dr, dc in MOVES:
             nr, nc = r + dr, c + dc
@@ -106,7 +112,7 @@ def knight_tour_astar(N, start_r, start_c, initial_enemies):
                     counter += 1
                     heapq.heappush(pq, (rem - 1, next_deg, -counter, nr, nc, next_path, next_visited, next_alive))
                     
-    return None, nodes_expanded
+    return None, nodes_expanded, max_depth
 
 def print_initial_board(N, start_r, start_c, enemies):
     print("\nBoard Awal:")
@@ -184,24 +190,23 @@ if __name__ == "__main__":
         
     print(f"\nMencari jalur... (Maks Node: {MAX_NODES_EXPANDED})")
     
-    # MULAI TRACKING PERFORMA
     tracemalloc.start()
     start_time = time.perf_counter()
     
-    path, nodes_expanded = knight_tour_astar(N, r, c, enemies)
+    path, nodes_expanded, max_depth = knight_tour_astar(N, r, c, enemies)
     
     end_time = time.perf_counter()
     current_mem, peak_mem = tracemalloc.get_traced_memory()
     tracemalloc.stop()
-    # SELESAI TRACKING PERFORMA
     
     runtime_ms = (end_time - start_time) * 1000
     peak_mem_mb = peak_mem / (1024 * 1024)
 
-    # Cetak Metrik
+    # Cetak 4 Metrik
     print("\n" + "="*30)
     print("HASIL ANALISIS PERFORMA:")
     print(f"Nodes Expanded : {nodes_expanded} nodes")
+    print(f"Peak Depth     : {max_depth} langkah")
     print(f"Runtime        : {runtime_ms:.2f} ms")
     print(f"Peak Memory    : {peak_mem_mb:.4f} MB")
     print("="*30)
