@@ -2,11 +2,7 @@
 Greedy (Warnsdorff) Knight's Tour for Levels 1-3.
 
 Informed search without backtracking: from the current square, move to the
-legal square with the FEWEST onward moves (Warnsdorff's rule). The choice is
-never undone, so the algorithm is very fast but can get stuck.
-
-  h(n) = number of onward moves available from the candidate square
-  Ties are broken by the first square in KNIGHT_MOVES order.
+legal square with the FEWEST onward moves (Warnsdorff's rule).
 
 Coordinates: (x, y), 0-indexed, x = column, y = row, (0,0) = top-left.
 
@@ -14,16 +10,10 @@ Levels:
   1: 5x5, no extra piece
   2: 6x6, king at (3,3)  -> attacks its 8 neighbours until captured
   3: 7x7, rook at (3,3)  -> attacks its row and column until captured
-
-The tour must visit every square, including the piece's square.
-Landing on the piece captures it and removes its attack zone.
-
-"Node" = one square stepped onto (including the start). For greedy this
-equals the squares visited before it finished or got stuck. Peak memory is 1
-because only the current state is kept (no stack, no queue).
 """
 
 import time
+import tracemalloc
 
 KNIGHT_MOVES = [(1, 2), (2, 1), (-1, 2), (-2, 1),
                 (1, -2), (2, -1), (-1, -2), (-2, -1)]
@@ -68,7 +58,7 @@ def onward_degree(q, visited, captured, n, zone, piece):
 
 
 def greedy_tour(n, start, piece=None, kind=None):
-    """Returns (solved, path, nodes, peak_memory)."""
+    """Returns (solved, path, nodes, peak_depth)."""
     zone = attack_zone(n, piece, kind)
     total = n * n
 
@@ -83,7 +73,7 @@ def greedy_tour(n, start, piece=None, kind=None):
     while len(path) < total:
         candidates = list(legal_moves(pos, visited, captured, n, zone))
         if not candidates:
-            return False, path, len(path), 1     # stuck: cannot undo moves
+            return False, path, len(path), len(path)     # stuck: cannot undo moves
 
         # Greedy choice: fewest onward moves (ties -> first in move order)
         nxt = min(candidates,
@@ -95,13 +85,11 @@ def greedy_tour(n, start, piece=None, kind=None):
             captured = True
         pos = nxt
 
-    return True, path, len(path), 1
+    return True, path, len(path), len(path)
+
 
 def print_initial_board(n, start, piece=None, kind=None):
-    """Show the starting board: knight, piece, and the piece's attack zone.
-
-    N = knight start, K = king, R = rook, x = attacked square, . = free square
-    """
+    """Show the starting board: knight, piece, and the piece's attack zone."""
     zone = attack_zone(n, piece, kind)
     symbol = {"king": "K", "rook": "R"}.get(kind, "P")
     for y in range(n):
@@ -122,6 +110,7 @@ def print_initial_board(n, start, piece=None, kind=None):
         legend += f", {symbol} = {kind}, x = attack square ({len(zone)} squares)"
     print(legend + ")")
 
+
 def print_board(n, path, piece=None):
     """Show the order in which squares were visited (1 = start)."""
     order = {sq: i + 1 for i, sq in enumerate(path)}
@@ -140,15 +129,21 @@ def print_board(n, path, piece=None):
 if __name__ == "__main__":
     for level, cfg in LEVELS.items():
         print("================================================================")
-        print(f"\n==================== Level {level}: initial board ====================")
+        print(f"================= Greedy Level {level}: initial board ================")
         print("================================================================")
         print_initial_board(cfg["n"], cfg["start"], cfg["piece"], cfg["kind"])
+
+        tracemalloc.start()
         t = time.time()
         ok, path, nodes, peak = greedy_tour(cfg["n"], cfg["start"],
                                             cfg["piece"], cfg["kind"])
         ms = (time.time() - t) * 1000
+        _, peak_bytes = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
         status = "SOLVED" if ok else "STUCK (greedy cannot backtrack)"
         print(f"\nLevel {level}: {cfg['n']}x{cfg['n']}, start {cfg['start']}, "
               f"piece {cfg['kind']} {cfg['piece']} -> {status}")
-        print(f"  nodes={nodes:,}  peak memory={peak}  time={ms:.1f} ms")
+        print(f"  nodes={nodes:,}  peak depth={peak}  peak memory={peak_bytes / 1024:.2f} KB  time={ms:.1f} ms")
         print_board(cfg["n"], path, cfg["piece"])
+        print()

@@ -10,15 +10,10 @@ Levels:
   1: 5x5, no extra piece
   2: 6x6, king at (3,3)  -> attacks its 8 neighbours until captured
   3: 7x7, rook at (3,3)  -> attacks its row and column until captured
-
-The tour must visit every square, including the piece's square.
-Landing on the piece captures it and removes its attack zone.
-
-"Node" = one call of the recursive search (one state entered), including
-states later backed out of. A node cap stops runs that take too long.
 """
 
 import time
+import tracemalloc
 
 KNIGHT_MOVES = [(1, 2), (2, 1), (-1, 2), (-2, 1),
                 (1, -2), (2, -1), (-1, -2), (-2, -1)]
@@ -29,7 +24,7 @@ LEVELS = {
     3: {"n": 7, "start": (0, 0), "piece": (3, 3), "kind": "rook"},
 }
 
-NODE_CAP = 5_000_000   # raise this to let DFS run longer (30M takes minutes)
+NODE_CAP = 5_000_000   # max recursive states entered
 
 
 def attack_zone(n, piece, kind):
@@ -75,7 +70,7 @@ def dfs_tour(n, start, piece=None, kind=None, node_cap=NODE_CAP):
         if stats["nodes"] > node_cap:
             return False
         if len(path) == total:
-            return True                     # goal: every square visited
+            return True                     # goal reached
 
         for q in legal_moves(pos, visited, captured, n, zone):
             visited.add(q)
@@ -93,6 +88,7 @@ def dfs_tour(n, start, piece=None, kind=None, node_cap=NODE_CAP):
 
     solved = search(start, piece is None)
     return solved, list(path), stats["nodes"], stats["peak"]
+
 
 def print_initial_board(n, start, piece=None, kind=None):
     zone = attack_zone(n, piece, kind)
@@ -134,17 +130,22 @@ def print_board(n, path, piece=None):
 if __name__ == "__main__":
     for level, cfg in LEVELS.items():
         print("================================================================")
-        print(f"\n==================== Level {level}: initial board ====================")
+        print(f"================== DFS Level {level}: initial board ==================")
         print("================================================================")
         print_initial_board(cfg["n"], cfg["start"], cfg["piece"], cfg["kind"])
-        print_initial_board(cfg["n"], cfg["start"], cfg["piece"], cfg["kind"])
+
+        tracemalloc.start()
         t = time.time()
         ok, path, nodes, peak = dfs_tour(cfg["n"], cfg["start"],
                                          cfg["piece"], cfg["kind"])
         ms = (time.time() - t) * 1000
+        _, peak_bytes = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
         status = "SOLVED" if ok else f"NOT SOLVED (hit {NODE_CAP:,} node cap)"
         print(f"\nLevel {level}: {cfg['n']}x{cfg['n']}, start {cfg['start']}, "
               f"piece {cfg['kind']} {cfg['piece']} -> {status}")
-        print(f"  nodes={nodes:,}  peak depth={peak}  time={ms:.1f} ms")
+        print(f"  nodes={nodes:,}  peak depth={peak}  peak memory={peak_bytes / 1024:.2f} KB  time={ms:.1f} ms")
         if ok:
             print_board(cfg["n"], path, cfg["piece"])
+        print()
