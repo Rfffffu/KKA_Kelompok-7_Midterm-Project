@@ -1,8 +1,15 @@
 """
-Greedy (Warnsdorff) Knight's Tour for Levels 1-3.
+Greedy Best-First Search (GBFS) Knight's Tour for Levels 1-3.
 
-Informed search without backtracking: from the current square, move to the
-legal square with the FEWEST onward moves (Warnsdorff's rule).
+Informed search with backtracking: a priority queue holds partial tours, and
+the one with the lowest heuristic value h(n) is expanded next.
+
+  h(n) = Warnsdorff onward degree (fewer onward moves from the current square first).
+         Purely Warnsdorff's rule (no g(n) path cost or piece distance).
+
+  Ties in h are broken statically (like DFS):
+    1. Deeper partial tours first (-depth / LIFO: goes as deep as possible).
+    2. Static move order (the fixed order in KNIGHT_MOVES).
 
 Coordinates: (x, y), 0-indexed, x = column, y = row, (0,0) = top-left.
 
@@ -12,6 +19,8 @@ Levels:
   3: 7x7, rook at (3,3)  -> attacks its row and column until captured
 """
 
+import heapq
+import itertools
 import time
 import tracemalloc
 
@@ -23,6 +32,9 @@ LEVELS = {
     2: {"n": 6, "start": (0, 0), "piece": (3, 3), "kind": "king"},
     3: {"n": 7, "start": (0, 0), "piece": (3, 3), "kind": "rook"},
 }
+
+NODE_CAP = 5_000_000        # max states expanded
+QUEUE_CAP = 2_000_000       # max partial tours stored at once
 
 
 def attack_zone(n, piece, kind):
@@ -52,44 +64,70 @@ def legal_moves(pos, visited, captured, n, zone):
 
 
 def onward_degree(q, visited, captured, n, zone, piece):
-    """Warnsdorff score: number of moves available from q if we went there."""
+    """Warnsdorff score: number of onward moves available from q if visited."""
     c = captured or q == piece
     return sum(1 for _ in legal_moves(q, visited | {q}, c, n, zone))
 
 
-def greedy_tour(n, start, piece=None, kind=None):
-    """Returns (solved, path, nodes, peak_depth)."""
+def gbfs_tour(n, start, piece=None, kind=None,
+              node_cap=NODE_CAP, queue_cap=QUEUE_CAP):
+    """Returns (solved, path, nodes_expanded, peak_depth)."""
     zone = attack_zone(n, piece, kind)
     total = n * n
 
     if start in zone or start == piece:
         raise ValueError("Start square must be outside the piece's square and zone.")
 
-    visited = {start}
-    path = [start]
-    captured = piece is None      # no piece -> nothing to capture
-    pos = start
+    counter = itertools.count()          # breaks ties so states are never compared
+    start_captured = piece is None
+    start_state = (start, (start,), frozenset([start]), start_captured)
 
-    while len(path) < total:
-        candidates = list(legal_moves(pos, visited, captured, n, zone))
-        if not candidates:
-            return False, path, len(path), len(path)     # stuck: cannot undo moves
+    # Heuristic evaluation: Warnsdorff onward degree only
+    h_start = onward_degree(start, start_state[2], start_captured, n, zone, piece)
 
-        # Greedy choice: fewest onward moves (ties -> first in move order)
-        nxt = min(candidates,
-                  key=lambda q: onward_degree(q, visited, captured, n, zone, piece))
+    # Heap tuple: (h, -depth, move_idx, counter, state)
+    #   - h: Warnsdorff score (fewest onward moves first)
+    #   - -depth: DFS depth preference (deepest partial tour first)
+    #   - move_idx: static tie-breaker (fixed order in KNIGHT_MOVES)
+    queue = [(h_start, -1, 0, next(counter), start_state)]
 
-        visited.add(nxt)
-        path.append(nxt)
-        if nxt == piece:
-            captured = True
-        pos = nxt
+    expanded = 0
+    peak_depth = 1
+    deepest_path = list(start_state[1])
 
-    return True, path, len(path), len(path)
+    while queue:
+        h, neg_depth, move_idx, _, (pos, path, visited, captured) = heapq.heappop(queue)
+        expanded += 1
+
+        if len(path) > peak_depth:
+            peak_depth = len(path)
+            deepest_path = list(path)
+
+        if expanded > node_cap:
+            return False, deepest_path, expanded, peak_depth
+        if len(visited) == total:
+            return True, list(path), expanded, peak_depth     # goal reached
+
+        # Generate candidates in static KNIGHT_MOVES order
+        for idx, (dx, dy) in enumerate(KNIGHT_MOVES):
+            q = (pos[0] + dx, pos[1] + dy)
+            if 0 <= q[0] < n and 0 <= q[1] < n and q not in visited \
+                    and (captured or q not in zone):
+                v2 = visited | {q}
+                c2 = captured or q == piece
+                h2 = onward_degree(q, visited, captured, n, zone, piece)
+                d2 = len(path) + 1
+
+                heapq.heappush(queue, (h2, -d2, idx, next(counter),
+                                       (q, path + (q,), v2, c2)))
+
+        if len(queue) > queue_cap:
+            return False, deepest_path, expanded, peak_depth
+
+    return False, deepest_path, expanded, peak_depth
 
 
 def print_initial_board(n, start, piece=None, kind=None):
-    """Show the starting board: knight, piece, and the piece's attack zone."""
     zone = attack_zone(n, piece, kind)
     symbol = {"king": "K", "rook": "R"}.get(kind, "P")
     for y in range(n):
@@ -129,19 +167,19 @@ def print_board(n, path, piece=None):
 if __name__ == "__main__":
     for level, cfg in LEVELS.items():
         print("================================================================")
-        print(f"================= Greedy Level {level}: initial board ================")
+        print(f"================== GBFS Level {level}: initial board ==================")
         print("================================================================")
         print_initial_board(cfg["n"], cfg["start"], cfg["piece"], cfg["kind"])
 
         tracemalloc.start()
         t = time.time()
-        ok, path, nodes, peak = greedy_tour(cfg["n"], cfg["start"],
-                                            cfg["piece"], cfg["kind"])
+        ok, path, nodes, peak = gbfs_tour(cfg["n"], cfg["start"],
+                                          cfg["piece"], cfg["kind"])
         ms = (time.time() - t) * 1000
         _, peak_bytes = tracemalloc.get_traced_memory()
         tracemalloc.stop()
 
-        status = "SOLVED" if ok else "STUCK (greedy cannot backtrack)"
+        status = "SOLVED" if ok else "NOT SOLVED (hit a cap or exhausted search)"
         print(f"\nLevel {level}: {cfg['n']}x{cfg['n']}, start {cfg['start']}, "
               f"piece {cfg['kind']} {cfg['piece']} -> {status}")
         print(f"  nodes={nodes:,}  peak depth={peak}  peak memory={peak_bytes / 1024:.2f} KB  time={ms:.1f} ms")
