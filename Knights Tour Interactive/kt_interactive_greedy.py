@@ -1,21 +1,24 @@
 """
-Greedy (Warnsdorff) Knight's Tour for Custom Board & Enemy Configurations.
+Interactive Knight's Tour using Greedy Best-First Search (GBFS).
 
-Informed search without backtracking: from the current square, move to the
-legal square with the FEWEST onward moves (Warnsdorff's rule).
-
-Coordinates: (x, y), 0-indexed, x = column, y = row, (0,0) = top-left.
-
-Supported enemy types:
-  - King ('k'): attacks its 8 immediate neighbors
-  - Rook ('r'): attacks its row and column
+Search Logic:
+  - Evaluation: h(n) = Warnsdorff onward degree (fewest onward moves first).
+  - Tie-breaking:
+      1. Deeper partial tours first (-depth / LIFO).
+      2. Static move order (index in KNIGHT_MOVES).
+      3. Insertion order (counter).
 """
 
+import heapq
+import itertools
 import time
 import tracemalloc
 
 KNIGHT_MOVES = [(1, 2), (2, 1), (-1, 2), (-2, 1),
                 (1, -2), (2, -1), (-1, -2), (-2, -1)]
+
+NODE_CAP = 5_000_000        # max states expanded
+QUEUE_CAP = 2_000_000       # max partial tours stored at once
 
 
 def attack_zone(n, piece, kind):
@@ -45,39 +48,65 @@ def legal_moves(pos, visited, captured, n, zone):
 
 
 def onward_degree(q, visited, captured, n, zone, piece):
-    """Warnsdorff score: number of moves available from q if we went there."""
+    """Warnsdorff score: number of onward moves available from q if visited."""
     c = captured or q == piece
     return sum(1 for _ in legal_moves(q, visited | {q}, c, n, zone))
 
 
-def greedy_tour(n, start, piece=None, kind=None):
-    """Returns (solved, path, nodes, peak_depth)."""
+def gbfs_tour(n, start, piece=None, kind=None,
+              node_cap=NODE_CAP, queue_cap=QUEUE_CAP):
+    """Returns (solved, path, nodes_expanded, peak_queue, max_depth)."""
     zone = attack_zone(n, piece, kind)
     total = n * n
 
     if start in zone or start == piece:
         raise ValueError("Start square must be outside the piece's square and attack zone.")
 
-    visited = {start}
-    path = [start]
-    captured = piece is None      # no piece -> nothing to capture
-    pos = start
+    counter = itertools.count()          # breaks ties so states are never compared directly
+    start_captured = piece is None
+    start_state = (start, (start,), frozenset([start]), start_captured)
 
-    while len(path) < total:
-        candidates = list(legal_moves(pos, visited, captured, n, zone))
-        if not candidates:
-            return False, path, len(path), len(path)     # stuck: cannot undo moves
+    # Heuristic evaluation: Warnsdorff onward degree only
+    h_start = onward_degree(start, start_state[2], start_captured, n, zone, piece)
 
-        nxt = min(candidates,
-                  key=lambda q: onward_degree(q, visited, captured, n, zone, piece))
+    # Priority queue tuple: (h, -depth, move_idx, counter, state)
+    queue = [(h_start, -1, 0, next(counter), start_state)]
 
-        visited.add(nxt)
-        path.append(nxt)
-        if nxt == piece:
-            captured = True
-        pos = nxt
+    expanded = 0
+    peak_queue = 1
+    max_depth = 1
 
-    return True, path, len(path), len(path)
+    while queue:
+        h, neg_depth, move_idx, _, (pos, path, visited, captured) = heapq.heappop(queue)
+        expanded += 1
+
+        current_depth = len(visited)
+        if current_depth > max_depth:
+            max_depth = current_depth
+
+        if expanded > node_cap:
+            return False, list(path), expanded, peak_queue, max_depth
+        if current_depth == total:
+            return True, list(path), expanded, peak_queue, max_depth     # goal reached
+
+        # Generate candidates in static KNIGHT_MOVES order
+        for idx, (dx, dy) in enumerate(KNIGHT_MOVES):
+            q = (pos[0] + dx, pos[1] + dy)
+            if 0 <= q[0] < n and 0 <= q[1] < n and q not in visited \
+                    and (captured or q not in zone):
+                v2 = visited | {q}
+                c2 = captured or q == piece
+                h2 = onward_degree(q, visited, captured, n, zone, piece)
+                d2 = len(path) + 1
+
+                heapq.heappush(queue, (h2, -d2, idx, next(counter),
+                                       (q, path + (q,), v2, c2)))
+
+        peak_queue = max(peak_queue, len(queue))
+        if len(queue) > queue_cap:
+            return False, list(path), expanded, peak_queue, max_depth
+
+    return False, [], expanded, peak_queue, max_depth
 
 
 def print_initial_board(n, start, piece=None, kind=None):
@@ -118,8 +147,8 @@ def print_board(n, path, piece=None):
 
 
 if __name__ == "__main__":
-    print("=== Interactive Greedy Warnsdorff Knight's Tour ===")
-    
+    print("=== Interactive Knight's Tour (GBFS - Pure Warnsdorff) ===")
+
     try:
         n = int(input("Input board size (n): ").strip())
     except ValueError:
@@ -135,7 +164,7 @@ if __name__ == "__main__":
         print(f"Invalid input, using default start = {start}")
 
     enemy_choice = input("enemy type [k (king), r (rook), none]: ").strip().lower()
-    
+
     piece = None
     kind = None
 
@@ -159,20 +188,24 @@ if __name__ == "__main__":
 
     tracemalloc.start()
     t = time.time()
+
     try:
-        ok, path, nodes, peak = greedy_tour(n, start, piece, kind)
+        ok, path, nodes, peak, max_depth = gbfs_tour(n, start, piece, kind)
     except ValueError as e:
         print(f"\nError: {e}")
         tracemalloc.stop()
         exit()
-        
+
     ms = (time.time() - t) * 1000
-    _, peak_bytes = tracemalloc.get_traced_memory()
+
+    current_mem, peak_mem = tracemalloc.get_traced_memory()
     tracemalloc.stop()
+    peak_mem_kb = peak_mem / 1024
 
-    print()
-    print_board(n, path, piece)
+    if ok:
+        print()
+        print_board(n, path, piece)
 
-    status = "SOLVED" if ok else "STUCK (greedy cannot backtrack)"
+    status = "SOLVED" if ok else "NOT SOLVED (hit a cap or exhausted search)"
     print(f"\n-> {status}")
-    print(f"nodes={nodes:,}  peak depth={peak}  peak memory={peak_bytes / 1024:.2f} KB  time={ms:.1f} ms")
+    print(f"nodes={nodes:,}  max depth={max_depth}  peak queue={peak:,}  time={ms:.1f} ms  peak memory={peak_mem_kb:.2f} KB")
