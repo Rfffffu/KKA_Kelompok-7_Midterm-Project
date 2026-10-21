@@ -3,7 +3,6 @@ import itertools
 import time
 import tracemalloc
 
-# Searah jarum jam, mulai dari atas-kanan
 KNIGHT_MOVES = [(1, 2), (2, 1), (-1, 2), (-2, 1),
                 (1, -2), (2, -1), (-1, -2), (-2, -1)]
 
@@ -70,7 +69,6 @@ def astar_tour(n, start, piece=None, kind=None,
         f, current_g, _, (pos, path, visited, captured) = heapq.heappop(queue)
         expanded += 1
         
-        # Update rekor kedalaman maksimum
         current_depth = len(visited)
         if current_depth > max_depth:
             max_depth = current_depth
